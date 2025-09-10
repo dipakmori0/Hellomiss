@@ -7,6 +7,7 @@ import os
 import datetime
 import logging
 from flask import Flask, request
+import random  # Added for the simulate_phone_data function
 
 # Flask app for hosting
 app = Flask(__name__)
@@ -21,8 +22,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Bot Token (gp.soulixer environment variable से लें)
-BOT_TOKEN = os.environ.get('BOT_TOKEN', "8304954508:AAHLxY3YfPHwF1dnBxv8noLUhmz9YxV5MxU")
+# Bot Token (updated with your new token)
+BOT_TOKEN = os.environ.get('BOT_TOKEN', "8304954508:AAEhKngNjPA5USAtB2yf-PszYH3YncXRqI4")
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode=None)
 
 # Bot Settings
