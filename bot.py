@@ -6,11 +6,7 @@ import time
 import os
 import datetime
 import logging
-from flask import Flask, request
-import random  # Added for the simulate_phone_data function
-
-# Flask app for hosting
-app = Flask(__name__)
+import random
 
 # Set up logging
 logging.basicConfig(
@@ -22,9 +18,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Bot Token (updated with your new token)
-BOT_TOKEN = os.environ.get('BOT_TOKEN', "8304954508:AAEhKngNjPA5USAtB2yf-PszYH3YncXRqI4")
-bot = telebot.TeleBot(BOT_TOKEN, parse_mode=None)
+# Bot Token (Environment variable से लें)
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '8304954508:AAEhKngNjPA5USAtB2yf-PszYH3YncXRqI4')
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 
 # Bot Settings
 BOT_STATUS = True  # Always online
@@ -230,32 +226,32 @@ def format_phone_info(api_data):
     if not api_data:
         return "❌ No information found for this number."
     
-    result = "📋 Phone Number Information:\n\n"
+    result = "📋 <b>Phone Number Information:</b>\n\n"
     
     # Basic info
     if api_data.get("number"):
-        result += f"• 📞 Number: {api_data['number']}\n"
+        result += f"• 📞 <b>Number:</b> {api_data['number']}\n"
     if api_data.get("carrier"):
-        result += f"• 📱 Carrier: {api_data['carrier']}\n"
+        result += f"• 📱 <b>Carrier:</b> {api_data['carrier']}\n"
     if api_data.get("country"):
-        result += f"• 🌍 Country: {api_data['country']}\n"
+        result += f"• 🌍 <b>Country:</b> {api_data['country']}\n"
     if api_data.get("region"):
-        result += f"• 🗺️ Region: {api_data['region']}\n"
+        result += f"• 🗺️ <b>Region:</b> {api_data['region']}\n"
     if api_data.get("city"):
-        result += f"• 🏙️ City: {api_data['city']}\n"
+        result += f"• 🏙️ <b>City:</b> {api_data['city']}\n"
     if api_data.get("timezone"):
-        result += f"• 🕐 Timezone: {api_data['timezone']}\n"
+        result += f"• 🕐 <b>Timezone:</b> {api_data['timezone']}\n"
     if api_data.get("valid"):
-        result += f"• ✅ Valid: {'Yes' if api_data['valid'] else 'No'}\n"
+        result += f"• ✅ <b>Valid:</b> {'Yes' if api_data['valid'] else 'No'}\n"
     
     # Additional info if available
     if api_data.get("line_type"):
-        result += f"• 📞 Line Type: {api_data['line_type']}\n"
+        result += f"• 📞 <b>Line Type:</b> {api_data['line_type']}\n"
     
     if api_data.get("simulated"):
-        result += "\n⚠️ Note: This is simulated data (APIs temporarily unavailable)\n"
+        result += "\n⚠️ <i>Note: This is simulated data (APIs temporarily unavailable)</i>\n"
     
-    result += "\n🔍 More details available in our premium version!"
+    result += "\n🔍 <b>More details available in our premium version!</b>"
     
     return result
 
@@ -282,7 +278,20 @@ def show_channel_join_menu(user_id):
     markup.add(InlineKeyboardButton("✅ I've Joined", callback_data="verify_join"))
     
     try:
-        bot.send_message(user_id, "🤖 To use this bot, please join all our channels first:", reply_markup=markup)
+        welcome_text = """
+🤖 <b>Welcome to Phone Info Bot!</b>
+
+📱 <i>Get detailed information about any phone number</i>
+
+🔒 <b>To use this bot, you need to join our channels first:</b>
+
+• 📢 Main Channel - Latest updates
+• 🔔 Updates Channel - Important announcements  
+• 📰 News Channel - Daily news
+
+👉 Join all channels below and then click "I've Joined" to continue!
+        """
+        bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Error sending channel join menu: {e}")
 
@@ -290,9 +299,10 @@ def show_channel_join_menu(user_id):
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = str(message.from_user.id)
+    first_name = message.from_user.first_name
     
     if not BOT_STATUS:
-        bot.send_message(user_id, "🤖 Bot is currently offline. Please try again later.")
+        bot.send_message(user_id, "🤖 <b>Bot is currently offline. Please try again later.</b>", parse_mode="HTML")
         return
     
     not_joined = check_all_channels(message.from_user.id)
@@ -302,18 +312,120 @@ def start(message):
     
     add_user(user_id)
     
+    # Check if it's a referral
+    referral_bonus = ""
     if len(message.text.split()) > 1:
         referrer_id = message.text.split()[1]
         if referrer_id != user_id:
             success = add_referral(referrer_id, user_id)
-            bot.send_message(user_id, "🎉 You joined using a referral link! +1 extra credit added to your account!")
+            referral_bonus = "\n🎉 <b>+1 extra credit for using referral link!</b>"
             
             if success:
                 referrals_count = get_referrals_count(referrer_id) or 0
                 total_refs = get_total_referrals(referrer_id) or 0
-                bot.send_message(referrer_id, f"🎉 New referral! +1 credit added! Total: {referrals_count}/200 (All: {total_refs})")
+                bot.send_message(referrer_id, f"🎉 <b>New referral!</b>\n+1 credit added!\nTotal: {referrals_count}/200\nAll-time: {total_refs}", parse_mode="HTML")
     
-    show_main_menu(user_id)
+    # Welcome message with user's name
+    welcome_text = f"""
+👋 <b>Welcome {first_name}!</b>
+
+📱 <i>Phone Information Bot - Get detailed info about any number</i>
+
+{referral_bonus}
+
+✨ <b>What would you like to do?</b>
+    """
+    
+    markup = InlineKeyboardMarkup()
+    markup.row(
+        InlineKeyboardButton("📞 Number Info", callback_data="number"),
+        InlineKeyboardButton("💳 Balance", callback_data="balance")
+    )
+    markup.row(
+        InlineKeyboardButton("🤝 Refer Friends", callback_data="referral"),
+        InlineKeyboardButton("🎁 Daily Reward", callback_data="daily")
+    )
+    
+    if str(user_id) in ADMIN_USERS:
+        markup.row(InlineKeyboardButton("👑 Admin Panel", callback_data="admin_dashboard"))
+    
+    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
+
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    help_text = """
+<b>📱 Phone Info Bot - Help Guide</b>
+
+<b>Available Commands:</b>
+/start - Start the bot
+/help - Show this help message
+/balance - Check your credits
+/refer - Get referral link
+/daily - Claim daily credits
+
+<b>How to use:</b>
+1. Click "📞 Number Info"
+2. Enter any 10-digit phone number
+3. Get detailed information instantly!
+
+<b>Earn Credits:</b>
+• 🎁 Daily rewards - 3 credits every day
+• 🤝 Refer friends - +1 credit per referral
+• 🏆 Get unlimited credits at 200 referrals
+
+<b>Need help?</b> Contact @your_admin_username
+    """
+    bot.send_message(message.chat.id, help_text, parse_mode="HTML")
+
+@bot.message_handler(commands=['balance'])
+def balance_command(message):
+    user_id = str(message.from_user.id)
+    credits = get_credits(user_id)
+    daily_credits = get_daily_credits(user_id)
+    referrals_count = get_referrals_count(user_id) or 0
+    
+    balance_text = f"""
+<b>💰 Your Account Balance</b>
+
+• 💎 <b>Available Credits:</b> {credits}
+• 📅 <b>Daily Credits:</b> {daily_credits}
+• 👥 <b>Successful Referrals:</b> {referrals_count}/200
+
+{"🎉 <b>UNLIMITED DAILY CREDITS ACTIVATED!</b>" if referrals_count >= 200 else f"📈 Need {200-referrals_count} more referrals for unlimited credits!"}
+    """
+    bot.send_message(user_id, balance_text, parse_mode="HTML")
+
+@bot.message_handler(commands=['refer'])
+def refer_command(message):
+    user_id = str(message.from_user.id)
+    bot_username = bot.get_me().username
+    referral_link = f"https://t.me/{bot_username}?start={user_id}"
+    
+    refer_text = f"""
+<b>🤝 Referral Program</b>
+
+🔗 <b>Your referral link:</b>
+<code>{referral_link}</code>
+
+🎁 <b>How it works:</b>
+• Share your link with friends
+• +1 credit when they join
+• +1 credit for them too!
+• Reach 200 referrals for UNLIMITED credits!
+
+📊 <b>Your stats:</b>
+• Referrals: {get_referrals_count(user_id)}/200
+• Total referrals: {get_total_referrals(user_id)}
+
+💡 <b>Pro tip:</b> Share in groups and with friends to earn credits faster!
+    """
+    bot.send_message(user_id, refer_text, parse_mode="HTML")
+
+@bot.message_handler(commands=['daily'])
+def daily_command(message):
+    user_id = str(message.from_user.id)
+    earn_credits(user_id, 3)
+    bot.send_message(user_id, "🎉 <b>3 daily credits added to your account!</b>\nCome back tomorrow for more!", parse_mode="HTML")
 
 def show_main_menu(user_id):
     credits = get_credits(user_id)
@@ -334,17 +446,17 @@ def show_main_menu(user_id):
         markup.row(InlineKeyboardButton("👑 Admin Dashboard", callback_data="admin_dashboard"))
     
     welcome_text = f"""
-👋 Welcome!
+👋 <b>Welcome Back!</b>
 
-💎 Available Credits: {credits}
-📅 Daily Credits: {daily_credits}
+💎 <b>Available Credits:</b> {credits}
+📅 <b>Daily Credits:</b> {daily_credits}
 
 {status_message}
 
-✨ Choose an option below:
+✨ <b>Choose an option below:</b>
 """
     
-    bot.send_message(user_id, welcome_text, reply_markup=markup)
+    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="HTML")
 
 # Callback Handlers
 @bot.callback_query_handler(func=lambda call: True)
@@ -356,7 +468,7 @@ def callback_handler(call):
         if not_joined:
             show_channel_join_menu(user_id)
         else:
-            msg = bot.send_message(user_id, "📞 Enter phone number (10 digits only):")
+            msg = bot.send_message(user_id, "📞 <b>Enter phone number (10 digits only):</b>\n\nExample: <code>9876543210</code>", parse_mode="HTML")
             bot.register_next_step_handler(msg, process_number)
     
     elif call.data == "balance":
@@ -365,45 +477,71 @@ def callback_handler(call):
         referrals_count = get_referrals_count(user_id) or 0
         
         stats_text = f"""
-📊 **Your Account Balance:**
+<b>💰 Your Account Balance</b>
 
-💎 Available Credits: {credits}
-📅 Daily Credits: {daily_credits}
-👥 Successful Referrals: {referrals_count}/200
+• 💎 <b>Available Credits:</b> {credits}
+• 📅 <b>Daily Credits:</b> {daily_credits}
+• 👥 <b>Successful Referrals:</b> {referrals_count}/200
+
+{"🎉 <b>UNLIMITED DAILY CREDITS ACTIVATED!</b>" if referrals_count >= 200 else f"📈 Need {200-referrals_count} more referrals for unlimited credits!"}
 """
-        if referrals_count >= 200:
-            stats_text += "🎉 **UNLIMITED DAILY CREDITS ACTIVATED!** 🎉"
+        bot.send_message(user_id, stats_text, parse_mode="HTML")
+    
+    elif call.data == "referral":
+        bot_username = bot.get_me().username
+        referral_link = f"https://t.me/{bot_username}?start={user_id}"
         
-        bot.send_message(user_id, stats_text, parse_mode="Markdown")
+        refer_text = f"""
+<b>🤝 Referral Program</b>
+
+🔗 <b>Your referral link:</b>
+<code>{referral_link}</code>
+
+🎁 <b>Benefits:</b>
+• +1 credit for each friend who joins
+• Your friend gets +1 credit too!
+• Reach 200 referrals for UNLIMITED credits!
+
+📊 <b>Your progress:</b>
+• Current: {get_referrals_count(user_id)}/200 referrals
+• Total: {get_total_referrals(user_id)} all-time
+
+💡 <b>Tip:</b> Share in groups and with friends!
+"""
+        bot.send_message(user_id, refer_text, parse_mode="HTML")
     
     elif call.data == "daily":
         earn_credits(user_id, 3)
         bot.answer_callback_query(call.id, "🎉 3 daily credits added to your account!")
+        bot.send_message(user_id, "🎉 <b>3 daily credits added to your account!</b>\nCome back tomorrow for more!", parse_mode="HTML")
     
     elif call.data == "verify_join":
         not_joined = check_all_channels(call.from_user.id)
         if not_joined:
-            bot.answer_callback_query(call.id, "Please join all channels first!")
+            bot.answer_callback_query(call.id, "❌ Please join all channels first!")
             show_channel_join_menu(user_id)
         else:
-            bot.answer_callback_query(call.id, "Thanks for joining!")
+            bot.answer_callback_query(call.id, "✅ Thanks for joining!")
             show_main_menu(user_id)
 
 def process_number(message):
     user_id = str(message.from_user.id)
     phone_number = message.text.strip()
     
-    if not phone_number.isdigit() or len(phone_number) != 10:
-        msg = bot.send_message(user_id, "❌ Invalid phone number! Please enter 10 digits only:")
+    # Remove any spaces or special characters
+    phone_number = ''.join(filter(str.isdigit, phone_number))
+    
+    if len(phone_number) != 10 or not phone_number.isdigit():
+        msg = bot.send_message(user_id, "❌ <b>Invalid phone number!</b>\nPlease enter exactly 10 digits:\n\nExample: <code>9876543210</code>", parse_mode="HTML")
         bot.register_next_step_handler(msg, process_number)
         return
     
     if not use_credit(user_id):
-        bot.send_message(user_id, "❌ You don't have enough credits!")
+        bot.send_message(user_id, "❌ <b>You don't have enough credits!</b>\n\nGet more credits by:\n• Claiming daily rewards (/daily)\n• Referring friends (/refer)\n• Waiting for tomorrow's free credits", parse_mode="HTML")
         return
     
-    # Show searching message
-    search_msg = bot.send_message(user_id, f"🔍 Searching for information on: {phone_number}...")
+    # Show searching message with animation
+    search_msg = bot.send_message(user_id, f"🔍 <b>Searching for information on:</b> <code>{phone_number}</code>\n\n⏳ Please wait...", parse_mode="HTML")
     
     # Call the API
     api_data = search_phone_number(phone_number)
@@ -413,43 +551,10 @@ def process_number(message):
     bot.edit_message_text(
         chat_id=user_id,
         message_id=search_msg.message_id,
-        text=formatted_info
+        text=formatted_info,
+        parse_mode="HTML"
     )
 
-# Flask routes for gp.soulixer
-@app.route('/')
-def index():
-    return "Telegram Bot is Running!"
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return 'OK'
-    else:
-        return 'Invalid content type', 400
-
-# Start bot in polling mode for gp.soulixer
-def run_bot():
-    logger.info("Starting bot in polling mode...")
-    try:
-        bot.remove_webhook()
-        time.sleep(1)
-        bot.polling(none_stop=True, interval=1, timeout=30)
-    except Exception as e:
-        logger.error(f"Bot polling error: {e}")
-        time.sleep(5)
-        run_bot()
-
+# Start the bot
 if __name__ == "__main__":
-    # Start bot in background thread
-    import threading
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
-    
-    # Run Flask app
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print(
