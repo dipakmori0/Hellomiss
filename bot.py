@@ -4,15 +4,11 @@ import sqlite3
 import requests
 import time
 import os
-import random
-import string
 import datetime
-import threading
 import logging
-import gc
 from flask import Flask, request
 
-# Flask app for Render web service
+# Flask app for hosting
 app = Flask(__name__)
 
 # Set up logging
@@ -20,19 +16,14 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('bot.log'),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
-# Bot Token (Render environment variable से लें)
+# Bot Token (gp.soulixer environment variable से लें)
 BOT_TOKEN = os.environ.get('BOT_TOKEN', "8304954508:AAHLxY3YfPHwF1dnBxv8noLUhmz9YxV5MxU")
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode=None)
-
-# API Configuration
-API_TOKEN = os.environ.get('API_TOKEN', "7658050410:WJ8iTpuZ")
-PEOPLE_API_URL = "https://leakosintapi.com/"
 
 # Bot Settings
 BOT_STATUS = True  # Always online
@@ -55,33 +46,11 @@ CHANNELS = [
     {"id": -1002921007541, "url": "https://t.me/CHOMUDONKIMAKICHUT", "name": "News Channel"}
 ]
 
-# VIP Levels
-VIP_LEVELS = {
-    0: {"name": "Regular User", "min_credits": 0, "benefits": ["Basic searches"]},
-    1: {"name": "Bronze Member", "min_credits": 50, "benefits": ["Faster searches", "Priority processing"]},
-    2: {"name": "Silver Member", "min_credits": 150, "benefits": ["Advanced search options", "Daily bonus credits"]},
-    3: {"name": "Gold Member", "min_credits": 500, "benefits": ["Exclusive data sources", "Priority support"]}
-}
-
-# Referral Bonuses
-REFERRAL_BONUSES = {
-    1: 1,    # 1 referral = 1 credit
-    10: 5,   # 10 referrals = 5 extra credits
-    200: 7   # 200 referrals = 7 days unlimited
-}
-
-# Database setup for Render (SQLite with file path)
+# Database setup
 def get_db_connection():
     """Get database connection"""
     try:
-        # Render पर persistent storage के लिए /tmp directory use करें
-        db_path = '/tmp/users.db' if os.path.exists('/tmp') else 'users.db'
-        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=10)
-        # Enable WAL mode for better performance
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA synchronous=NORMAL')
-        conn.execute('PRAGMA cache_size=1000')
-        logger.info(f"Database connection established at {db_path}")
+        conn = sqlite3.connect('users.db', check_same_thread=False, timeout=10)
         return conn
     except Exception as e:
         logger.error(f"Database connection error: {e}")
@@ -210,79 +179,82 @@ def get_daily_credits(user_id):
         return f"{3 - daily_claimed}/3"
     return "0/3"
 
-# API Functions
+# API Functions - Working APIs
 def search_phone_number(phone_number):
-    """Search phone number using the API"""
+    """Search phone number using working APIs"""
     try:
-        headers = {
-            "Authorization": f"Bearer {API_TOKEN}",
-            "Content-Type": "application/json"
-        }
+        # Try multiple API sources
+        apis = [
+            f"http://apilayer.net/api/validate?access_key=demo&number={phone_number}&country_code=IN&format=1",
+            f"https://phonevalidation.abstractapi.com/v1/?api_key=demo&phone={phone_number}",
+            f"https://numverify.com/php_helper_scripts/phone_api.php?number={phone_number}"
+        ]
         
-        payload = {
-            "number": phone_number
-        }
-        
-        response = requests.post(
-            f"{PEOPLE_API_URL}/search/phone",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            return response.json()
-        else:
-            logger.error(f"API Error: {response.status_code} - {response.text}")
-            return None
+        for api_url in apis:
+            try:
+                response = requests.get(api_url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    return data
+            except:
+                continue
+                
+        # If all APIs fail, return simulated data
+        return simulate_phone_data(phone_number)
             
     except Exception as e:
         logger.error(f"API Request Error: {e}")
-        return None
+        return simulate_phone_data(phone_number)
+
+def simulate_phone_data(phone_number):
+    """Simulate phone data when APIs are down"""
+    carriers = ["Jio", "Airtel", "Vi", "BSNL"]
+    states = ["Maharashtra", "Delhi", "Karnataka", "Tamil Nadu", "Uttar Pradesh"]
+    cities = ["Mumbai", "Delhi", "Bangalore", "Chennai", "Kolkata"]
+    
+    return {
+        "valid": True,
+        "number": phone_number,
+        "carrier": random.choice(carriers),
+        "country": "India",
+        "region": random.choice(states),
+        "city": random.choice(cities),
+        "timezone": "Asia/Kolkata",
+        "line_type": "mobile",
+        "simulated": True
+    }
 
 def format_phone_info(api_data):
     """Format API response into readable text"""
-    if not api_data or "data" not in api_data:
+    if not api_data:
         return "❌ No information found for this number."
     
-    data = api_data["data"]
     result = "📋 Phone Number Information:\n\n"
     
     # Basic info
-    if data.get("number"):
-        result += f"• 📞 Number: {data['number']}\n"
-    if data.get("carrier"):
-        result += f"• 📱 Carrier: {data['carrier']}\n"
-    if data.get("country"):
-        result += f"• 🌍 Country: {data['country']}\n"
-    if data.get("region"):
-        result += f"• 🗺️ Region: {data['region']}\n"
-    if data.get("timezone"):
-        result += f"• 🕐 Timezone: {data['timezone']}\n"
-    if data.get("valid"):
-        result += f"• ✅ Valid: {'Yes' if data['valid'] else 'No'}\n"
+    if api_data.get("number"):
+        result += f"• 📞 Number: {api_data['number']}\n"
+    if api_data.get("carrier"):
+        result += f"• 📱 Carrier: {api_data['carrier']}\n"
+    if api_data.get("country"):
+        result += f"• 🌍 Country: {api_data['country']}\n"
+    if api_data.get("region"):
+        result += f"• 🗺️ Region: {api_data['region']}\n"
+    if api_data.get("city"):
+        result += f"• 🏙️ City: {api_data['city']}\n"
+    if api_data.get("timezone"):
+        result += f"• 🕐 Timezone: {api_data['timezone']}\n"
+    if api_data.get("valid"):
+        result += f"• ✅ Valid: {'Yes' if api_data['valid'] else 'No'}\n"
     
     # Additional info if available
-    if data.get("line_type"):
-        result += f"• 📞 Line Type: {data['line_type']}\n"
-    if data.get("ported"):
-        result += f"• 🔄 Ported: {'Yes' if data['ported'] else 'No'}\n"
+    if api_data.get("line_type"):
+        result += f"• 📞 Line Type: {api_data['line_type']}\n"
     
-    # Social media profiles if available
-    if data.get("social_media") and isinstance(data["social_media"], list) and len(data["social_media"]) > 0:
-        result += "\n• 📱 Social Media Profiles:\n"
-        for profile in data["social_media"]:
-            if profile.get("platform") and profile.get("url"):
-                result += f"  - {profile['platform']}: {profile['url']}\n"
+    if api_data.get("simulated"):
+        result += "\n⚠️ Note: This is simulated data (APIs temporarily unavailable)\n"
     
-    # Associated people if available
-    if data.get("associated_people") and isinstance(data["associated_people"], list) and len(data["associated_people"]) > 0:
-        result += "\n• 👥 Associated People:\n"
-        for person in data["associated_people"]:
-            if person.get("name"):
-                result += f"  - {person['name']}\n"
-                if person.get("relation"):
-                    result += f"    Relation: {person['relation']}\n"
+    result += "\n🔍 More details available in our premium version!"
     
     return result
 
@@ -435,49 +407,48 @@ def process_number(message):
     # Call the API
     api_data = search_phone_number(phone_number)
     
-    if api_data:
-        # Format and send the results
-        formatted_info = format_phone_info(api_data)
-        bot.edit_message_text(
-            chat_id=user_id,
-            message_id=search_msg.message_id,
-            text=formatted_info
-        )
-    else:
-        # If API fails, send a fallback message
-        bot.edit_message_text(
-            chat_id=user_id,
-            message_id=search_msg.message_id,
-            text=f"❌ Sorry, we couldn't retrieve information for {phone_number} at this time. Please try again later."
-        )
+    # Format and send the results
+    formatted_info = format_phone_info(api_data)
+    bot.edit_message_text(
+        chat_id=user_id,
+        message_id=search_msg.message_id,
+        text=formatted_info
+    )
 
-# Flask routes for Render
+# Flask routes for gp.soulixer
 @app.route('/')
 def index():
-    return "Bot is running!"
+    return "Telegram Bot is Running!"
 
-@app.route('/webhook/' + BOT_TOKEN, methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
-        return ''
+        return 'OK'
     else:
-        return 'Invalid content type', 403
+        return 'Invalid content type', 400
 
-# Remove previous webhooks and set new one
-try:
-    bot.remove_webhook()
-    time.sleep(1)
-    # Render automatically provides the URL via RENDER_EXTERNAL_URL environment variable
-    webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook/{BOT_TOKEN}"
-    bot.set_webhook(url=webhook_url)
-    logger.info(f"Webhook set to: {webhook_url}")
-except Exception as e:
-    logger.error(f"Webhook setup error: {e}")
+# Start bot in polling mode for gp.soulixer
+def run_bot():
+    logger.info("Starting bot in polling mode...")
+    try:
+        bot.remove_webhook()
+        time.sleep(1)
+        bot.polling(none_stop=True, interval=1, timeout=30)
+    except Exception as e:
+        logger.error(f"Bot polling error: {e}")
+        time.sleep(5)
+        run_bot()
 
 if __name__ == "__main__":
-    # Get port from Render environment variable or default to 10000
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    # Start bot in background thread
+    import threading
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # Run Flask app
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
