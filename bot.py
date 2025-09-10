@@ -10,6 +10,10 @@ import datetime
 import threading
 import logging
 import gc
+from flask import Flask, request
+
+# Flask app for Render web service
+app = Flask(__name__)
 
 # Set up logging
 logging.basicConfig(
@@ -206,6 +210,82 @@ def get_daily_credits(user_id):
         return f"{3 - daily_claimed}/3"
     return "0/3"
 
+# API Functions
+def search_phone_number(phone_number):
+    """Search phone number using the API"""
+    try:
+        headers = {
+            "Authorization": f"Bearer {API_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "number": phone_number
+        }
+        
+        response = requests.post(
+            f"{PEOPLE_API_URL}/search/phone",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"API Error: {response.status_code} - {response.text}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"API Request Error: {e}")
+        return None
+
+def format_phone_info(api_data):
+    """Format API response into readable text"""
+    if not api_data or "data" not in api_data:
+        return "❌ No information found for this number."
+    
+    data = api_data["data"]
+    result = "📋 Phone Number Information:\n\n"
+    
+    # Basic info
+    if data.get("number"):
+        result += f"• 📞 Number: {data['number']}\n"
+    if data.get("carrier"):
+        result += f"• 📱 Carrier: {data['carrier']}\n"
+    if data.get("country"):
+        result += f"• 🌍 Country: {data['country']}\n"
+    if data.get("region"):
+        result += f"• 🗺️ Region: {data['region']}\n"
+    if data.get("timezone"):
+        result += f"• 🕐 Timezone: {data['timezone']}\n"
+    if data.get("valid"):
+        result += f"• ✅ Valid: {'Yes' if data['valid'] else 'No'}\n"
+    
+    # Additional info if available
+    if data.get("line_type"):
+        result += f"• 📞 Line Type: {data['line_type']}\n"
+    if data.get("ported"):
+        result += f"• 🔄 Ported: {'Yes' if data['ported'] else 'No'}\n"
+    
+    # Social media profiles if available
+    if data.get("social_media") and isinstance(data["social_media"], list) and len(data["social_media"]) > 0:
+        result += "\n• 📱 Social Media Profiles:\n"
+        for profile in data["social_media"]:
+            if profile.get("platform") and profile.get("url"):
+                result += f"  - {profile['platform']}: {profile['url']}\n"
+    
+    # Associated people if available
+    if data.get("associated_people") and isinstance(data["associated_people"], list) and len(data["associated_people"]) > 0:
+        result += "\n• 👥 Associated People:\n"
+        for person in data["associated_people"]:
+            if person.get("name"):
+                result += f"  - {person['name']}\n"
+                if person.get("relation"):
+                    result += f"    Relation: {person['relation']}\n"
+    
+    return result
+
 # Channel Functions
 def is_user_joined(user_id, channel_id):
     try:
@@ -349,19 +429,55 @@ def process_number(message):
         bot.send_message(user_id, "❌ You don't have enough credits!")
         return
     
-    bot.send_message(user_id, f"🔍 Searching for information on: {phone_number}...")
-    time.sleep(2)
-    bot.send_message(user_id, f"📋 Information for {phone_number}:\n\n• Carrier: Jio\n• Region: Maharashtra\n• Status: Active")
+    # Show searching message
+    search_msg = bot.send_message(user_id, f"🔍 Searching for information on: {phone_number}...")
+    
+    # Call the API
+    api_data = search_phone_number(phone_number)
+    
+    if api_data:
+        # Format and send the results
+        formatted_info = format_phone_info(api_data)
+        bot.edit_message_text(
+            chat_id=user_id,
+            message_id=search_msg.message_id,
+            text=formatted_info
+        )
+    else:
+        # If API fails, send a fallback message
+        bot.edit_message_text(
+            chat_id=user_id,
+            message_id=search_msg.message_id,
+            text=f"❌ Sorry, we couldn't retrieve information for {phone_number} at this time. Please try again later."
+        )
 
-# Keep alive for Render
-def run_bot():
-    while True:
-        try:
-            bot.polling(none_stop=True, interval=1, timeout=30)
-        except Exception as e:
-            logger.error(f"Bot polling error: {e}")
-            time.sleep(5)
+# Flask routes for Render
+@app.route('/')
+def index():
+    return "Bot is running!"
+
+@app.route('/webhook/' + BOT_TOKEN, methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return ''
+    else:
+        return 'Invalid content type', 403
+
+# Remove previous webhooks and set new one
+try:
+    bot.remove_webhook()
+    time.sleep(1)
+    # Render automatically provides the URL via RENDER_EXTERNAL_URL environment variable
+    webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook/{BOT_TOKEN}"
+    bot.set_webhook(url=webhook_url)
+    logger.info(f"Webhook set to: {webhook_url}")
+except Exception as e:
+    logger.error(f"Webhook setup error: {e}")
 
 if __name__ == "__main__":
-    logger.info("Bot started on Render")
-    run_bot()
+    # Get port from Render environment variable or default to 10000
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
