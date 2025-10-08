@@ -1,7 +1,16 @@
 services:
   - type: web
-    name: telegram-phone-bot
+    name: telegram-osint-bot
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python bot.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        value: "8319030007:AAH25q874QqP5F4eX0AalQqsQc9QhMwwfoY"
+      - key: API_KEY
+        value: "7658050410:3GTVV630"
+      - key: API_URL
+        value: "https://leakosintapi.com/"
+      - key: ADMINS
+        value: "8006485674"
